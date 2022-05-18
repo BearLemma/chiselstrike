@@ -321,8 +321,23 @@ impl TypeSystem {
             added_fields,
             removed_fields,
             updated_fields,
+            added_indexes: Self::find_added_indexes(old_type, &new_type),
             removed_indexes: Self::find_removed_indexes(old_type, &new_type),
         })
+    }
+
+    fn find_added_indexes(old_type: &ObjectType, new_type: &ObjectType) -> Vec<DbIndex> {
+        let mut added_indexes = vec![];
+        for new_idx in new_type.indexes() {
+            let contains_idx = old_type
+                .indexes()
+                .iter()
+                .any(|old_idx| old_idx.fields == new_idx.fields);
+            if !contains_idx {
+                added_indexes.push(new_idx.clone());
+            }
+        }
+        added_indexes
     }
 
     fn find_removed_indexes(old_type: &ObjectType, new_type: &ObjectType) -> Vec<DbIndex> {
@@ -1024,5 +1039,6 @@ pub(crate) struct ObjectDelta {
     pub(crate) added_fields: Vec<Field>,
     pub(crate) removed_fields: Vec<Field>,
     pub(crate) updated_fields: Vec<FieldDelta>,
+    pub(crate) added_indexes: Vec<DbIndex>,
     pub(crate) removed_indexes: Vec<DbIndex>,
 }

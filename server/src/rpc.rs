@@ -393,6 +393,16 @@ impl RpcService {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        let to_update = to_update
+            .into_iter()
+            .map(|(ty, delta)| {
+                let updated_ty = state
+                    .type_system
+                    .lookup_custom_type(ty.name(), &api_version);
+                updated_ty.map(|ty| (ty, delta))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         // Update the data database after all the metdata is up2date.
         // We will not get a single transaction because in the general case those things
         // could be in totally different databases. However, some foreign relations would force

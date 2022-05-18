@@ -532,6 +532,13 @@ impl MetaService {
             execute(transaction, del_index).await?;
         }
 
+        Self::insert_indexes(
+            transaction,
+            ty.meta_id
+                .context("object must have an id when it's being updated")?,
+            &delta.added_indexes,
+        )
+        .await?;
         Ok(())
     }
 
@@ -616,10 +623,19 @@ impl MetaService {
         for field in ty.user_fields() {
             insert_field_query(transaction, ty, Some(id), field).await?;
         }
-        for index in ty.indexes() {
+        Self::insert_indexes(transaction, id, ty.indexes()).await?;
+        Ok(())
+    }
+
+    async fn insert_indexes(
+        transaction: &mut Transaction<'_, Any>,
+        type_id: i32,
+        indexes: &[DbIndex],
+    ) -> anyhow::Result<()> {
+        for index in indexes {
             let fields = index.fields.join(";");
             let add_index = sqlx::query("INSERT INTO indexes (type_id, fields) VALUES ($1, $2)")
-                .bind(id)
+                .bind(type_id)
                 .bind(fields);
             execute(transaction, add_index).await?;
         }

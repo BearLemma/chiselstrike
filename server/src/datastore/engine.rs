@@ -4,7 +4,7 @@ use crate::datastore::query::{
     Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
 use crate::datastore::{DbConnection, Kind};
-use crate::types::{Field, ObjectDelta, ObjectType, Type};
+use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_lock::Mutex;
@@ -274,26 +274,14 @@ impl QueryEngine {
         let create_table = sqlx::query(&create_table);
         transaction.execute(create_table).await?;
 
-        for index in ty.indexes() {
-            let idx_name = index
-                .name()
-                .context("index must have a name at a time of table creation")?;
-            let create_index = sqlx::query(
-                r#"
-                CREATE INDEX IF NOT EXISTS $1 ON $2;
-            "#,
-            )
-            .bind(idx_name)
-            .bind(ty.backing_table());
-            transaction.execute(create_index).await?;
-        }
+        Self::create_indexes(transaction, ty, ty.indexes()).await?;
         Ok(())
     }
 
     pub(crate) async fn alter_table(
         &self,
         transaction: &mut Transaction<'_, Any>,
-        old_ty: &ObjectType,
+        ty: &ObjectType,
         delta: ObjectDelta,
     ) -> Result<()> {
         // using a macro as async closures are unstable
@@ -313,7 +301,7 @@ impl QueryEngine {
                         .name()
                         .context("index must have a name when dropped")?,
                 )
-                .table(Alias::new(old_ty.backing_table()))
+                .table(Alias::new(ty.backing_table()))
                 .to_owned();
             do_query!(drop_idx)?;
         }
@@ -339,7 +327,7 @@ impl QueryEngine {
         for field in delta.added_fields.iter() {
             let mut column_def = ColumnDef::try_from(field)?;
             let table = Table::alter()
-                .table(Alias::new(old_ty.backing_table()))
+                .table(Alias::new(ty.backing_table()))
                 .add_column(&mut column_def)
                 .to_owned();
 
@@ -348,7 +336,7 @@ impl QueryEngine {
 
         for field in delta.removed_fields.iter() {
             let table = Table::alter()
-                .table(Alias::new(old_ty.backing_table()))
+                .table(Alias::new(ty.backing_table()))
                 .drop_column(Alias::new(&field.name))
                 .to_owned();
 
@@ -361,6 +349,35 @@ impl QueryEngine {
         // There are modifications that we can accept on application side (like changing defaults),
         // since we always write with defaults. For all others, we should error out way before we
         // get here.
+
+        Self::create_indexes(transaction, ty, &ty.indexes()).await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn create_indexes(
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+        indexes: &[DbIndex],
+    ) -> Result<()> {
+        for index in indexes {
+            let idx_name = index
+                .name()
+                .context("index must have a name at a time of table creation")?;
+            let columns = index.fields.iter().join(", ");
+            let sql = format!(
+                r#"
+                CREATE INDEX IF NOT EXISTS "{idx_name}" ON "{}" ({});
+            "#,
+                ty.backing_table(),
+                columns
+            );
+            let mut create_index = sqlx::query(&sql).bind(idx_name).bind(ty.backing_table());
+            for field_name in &index.fields {
+                create_index = create_index.bind(field_name);
+            }
+            transaction.execute(create_index).await?;
+        }
         Ok(())
     }
 
