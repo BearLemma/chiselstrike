@@ -8,5 +8,3 @@ This example will be updated over time to show off more and more features.  When
 we host the backend.
 
 [GitHub](https://github.com/chiselstrike/chiselstrike-examples/tree/main/nextjs)
-
-

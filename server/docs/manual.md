@@ -35,7 +35,7 @@ chiseld --metadata-db-uri sqlite://:memory:
 ### Docker/Podman containers:
 
 
-The docker/podman containers enable the same set of settables as the 
+The docker/podman containers enable the same set of settables as the
 `chiseld` server (with some minor differences).
 
 `API_PORT`  API server listen port [default: 8080]
@@ -56,5 +56,3 @@ The docker/podman containers enable the same set of settables as the
 ```bash
 docker run -d -e API_PORT=8081 -e RPC_PORT=8082 -p 8081:8081 -p 8082:8082 chiseld:latest
 ```
-
-

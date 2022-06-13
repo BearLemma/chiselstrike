@@ -6,8 +6,8 @@ In this section we'll show how to move beyond simple CRUD requests, as shown in 
 
 <!-- FIXME: move into extra chapter? -->
 
-CRUD generation is customizable; more detail and syntax around this and also security policy is coming soon but 
-here is a lower-level example that forbids DELETE, POST, and PUT while wrapping the GET result 
+CRUD generation is customizable; more detail and syntax around this and also security policy is coming soon but
+here is a lower-level example that forbids DELETE, POST, and PUT while wrapping the GET result
 with either `{"data": VALUE}` or `{"error": "message"}` depending on the result.
 
 <!-- FIXME: replace with class based alternates once available -->
@@ -98,7 +98,7 @@ error checking in this example.
 
 With this endpoint example, we're now getting to know ChiselStrike's API and runtime better. Notice how
 we were able to parse the request under `POST` with our own custom validation, and then use
-the `build` API to construct an object that is then persisted with `save`.  We'll explain the use of the 
+the `build` API to construct an object that is then persisted with `save`.  We'll explain the use of the
 data model more in [Data Access](Intro/data-access).
 
 Finally, notice how we can return a standard `Response` in some cases, but also can also use the convenience method
@@ -154,4 +154,3 @@ and we should see something like the following:
 🎉 Nice! You've gone from a simple REST API for learning how to write full custom endpoints using the full data model.
 It's time to explore our API in greater depth, then you can set out and explore other documentation sections according
 to your interests!
-

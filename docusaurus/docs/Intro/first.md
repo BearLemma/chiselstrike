@@ -429,4 +429,3 @@ curl -X DELETE localhost:8080/dev/comments/?.by=Jack
 
 🎉 Ta-da! You're a pro now!  There's a basic simple CRUD RESTful API, right out of the box.
 In the next sections we'll show how to customize this endpoint further.
-

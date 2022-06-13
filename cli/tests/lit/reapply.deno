@@ -62,7 +62,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Foo extends ChiselEntity {
   a: string = "foo";
-  b: number; 
+  b: number;
   c: number;
 }
 EOF
@@ -110,4 +110,3 @@ export class Bar extends ChiselEntity {
 EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: unsafe to replace type: Bar
-

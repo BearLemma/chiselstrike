@@ -228,5 +228,3 @@ Examples coming soon!
 
 Now you've seen all the basics about data-access and hope you are enjoying not having to write any SQL or deal with migrations or anything like that!
 We have some additional options available. When you feel like exploring, read [Cursors](InDepth/cursors.md) for how to build queries in very powerful composable ways.
-
-

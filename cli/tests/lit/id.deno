@@ -95,4 +95,3 @@ $CURL -X PUT $CHISELD_HOST/dev/update_by_id
 
 $CURL $CHISELD_HOST/dev/count_glaubers
 # CHECK: 1
-

@@ -280,4 +280,3 @@ $CURL $CHISELD_HOST/dev/sort_skip_take
 
 $CURL $CHISELD_HOST/dev/sort_skip_take_filter
 # CHECK: [Pekka]
-

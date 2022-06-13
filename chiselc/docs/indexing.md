@@ -6,7 +6,7 @@ The runtime can use this as a set of _candidate indexes_.
 ## Example
 
 The following `filter(restriction)` call:
- 
+
 ```typescript
 Person.cursor().filter({ name: name, age: age });
 ```

@@ -24,4 +24,3 @@ $CURL $CHISELD_HOST/dev/empty
 
 $CURL $CHISELD_HOST/dev/emptychisel
 # CHECK: HTTP/1.1 204 No Content
-

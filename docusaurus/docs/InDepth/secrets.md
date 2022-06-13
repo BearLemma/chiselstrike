@@ -76,5 +76,3 @@ We know you know this, but a reminder is always welcome!
 Never commit your secrets file to git, and don't expose them where users
 can ask for them!
 :::
-
-

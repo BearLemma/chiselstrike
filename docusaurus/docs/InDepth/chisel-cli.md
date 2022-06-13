@@ -162,4 +162,3 @@ The metadata database URI to connect to.
 #### `--rpc-listen-addr [ADDR]`
 
 The RPC listen address of the server. This is the address that the ChiselStrike CLI connects to to interact with the server.
-

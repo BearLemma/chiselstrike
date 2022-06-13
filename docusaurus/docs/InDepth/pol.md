@@ -17,7 +17,7 @@ transformed like this whenever it is accessed".
 
 Let's first examine more precisely how you define which data we're
 talking about.  This is done using _labels_: TypeScript decorators on
-the fields of your models.  
+the fields of your models.
 
 For instance, suppose we have a BlogComment object defined and add the "labels"
 decorator as shown below:

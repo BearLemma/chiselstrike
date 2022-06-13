@@ -56,4 +56,3 @@ $CURL -o - $CHISELD_HOST/dev/endpoint
 # CHECK: HTTP/1.1 404 Not Found
 $CURL -o - $CHISELD_HOST/dev/endpo
 # CHECK: HTTP/1.1 200 OK
-

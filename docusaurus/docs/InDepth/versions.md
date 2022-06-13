@@ -95,4 +95,3 @@ The `curl` command reports:
 API versioning is useful for:
 * Development/preview branches,
 * Supporting older and newer clients, once version linking in supported.
-

@@ -8,5 +8,3 @@ ChiselStrike to add dynamic comments.
 This example will be updated over time to show off more and more features.
 
 [GitHub](https://github.com/chiselstrike/chiselstrike-examples/tree/main/gatsby)
-
-
