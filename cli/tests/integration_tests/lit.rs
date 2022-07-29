@@ -1,101 +1,20 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
-
 extern crate lit;
 
-use crate::common::bin_dir;
-use crate::common::repo_dir;
-use crate::common::run;
-use crate::lit::event_handler::EventHandler;
+use crate::common::{bin_dir, repo_dir, Opt};
+use ::lit::event_handler::EventHandler;
 use anyhow::{anyhow, Result};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::env;
-use std::fmt::{Display, Formatter};
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use structopt::StructOpt;
-
-mod common;
-
-#[derive(Debug, Clone)]
-enum Database {
-    Postgres,
-    Sqlite,
-}
-
-impl Display for Database {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Database::Postgres => write!(f, "postgres"),
-            Database::Sqlite => write!(f, "sqlite"),
-        }
-    }
-}
-
-type ParseError = &'static str;
-
-impl FromStr for Database {
-    type Err = ParseError;
-
-    fn from_str(database: &str) -> Result<Self, Self::Err> {
-        match database {
-            "postgres" => Ok(Database::Postgres),
-            "sqlite" => Ok(Database::Sqlite),
-            _ => Err("Unsupported database"),
-        }
-    }
-}
-
-#[derive(Debug, StructOpt, Clone)]
-#[structopt(name = "lit_test", about = "Runs integration tests")]
-struct Opt {
-    /// Name of a signle lit test to run (e.g. `populate.lit`)
-    #[structopt(short, long)]
-    test: Option<String>,
-    /// Database system to test with. Supported values: `sqlite` (default) and `postgres`.
-    #[structopt(long, default_value = "sqlite")]
-    database: Database,
-    /// Database host name. Default: `localhost`.
-    #[structopt(long, default_value = "localhost")]
-    database_host: String,
-    /// Database username.
-    #[structopt(long)]
-    database_user: Option<String>,
-    /// Database password.
-    #[structopt(long)]
-    database_password: Option<String>,
-}
 
 fn chisel() -> String {
     bin_dir().join("chisel").to_str().unwrap().to_string()
 }
 
-fn main() {
-    // install the current packages in our package.json. This will make things like esbuild
-    // generally available. Tests that want a specific extra package can then install on top
-    run("npm", ["install"]);
-
-    let opt = Opt::from_args();
-
-    let bd = bin_dir();
-    let mut args = vec!["build"];
-    if bd.ends_with("release") {
-        args.push("--release");
-    }
-    run("cargo", args);
-
-    let ok_without_optimization = run_tests(opt.clone(), false);
-    let ok_with_optimization = run_tests(opt, true);
-    std::process::exit(if ok_with_optimization && ok_without_optimization {
-        0
-    } else {
-        1
-    });
-}
-
-fn run_tests(opt: Opt, optimize: bool) -> bool {
+pub(crate) fn run_tests(opt: Opt, optimize: bool) -> bool {
     if optimize {
         eprintln!("Running tests with optimization");
     } else {
@@ -135,8 +54,8 @@ fn run_tests(opt: Opt, optimize: bool) -> bool {
         let path = Path::new("tests/lit").join(test_file);
         vec![std::fs::canonicalize(path).unwrap()]
     } else {
-        let deno_lits = glob::glob("tests/lit/**/*.deno").unwrap();
-        let node_lits = glob::glob("tests/lit/**/*.node").unwrap();
+        let deno_lits = glob::glob("tests/integration_tests/lit/**/*.deno").unwrap();
+        let node_lits = glob::glob("tests/integration_tests/lit/**/*.node").unwrap();
         deno_lits
             .chain(node_lits)
             .map(|path| std::fs::canonicalize(path.unwrap()).unwrap())
@@ -168,7 +87,7 @@ fn run_tests(opt: Opt, optimize: bool) -> bool {
                     config.always_show_stdout = false;
 
                     let mut path = repo.clone();
-                    path.push("cli/tests/test-wrapper.sh");
+                    path.push("cli/tests/integration_tests/test-wrapper.sh");
                     config.shell = path.to_str().unwrap().to_string();
                     config.env_variables = HashMap::from([
                         (
