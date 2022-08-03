@@ -720,6 +720,7 @@ dependencies = [
  "futures-lite",
  "glob",
  "handlebars",
+ "inventory",
  "itertools 0.10.3",
  "lit",
  "nix 0.22.3",
@@ -939,6 +940,16 @@ checksum = "2ccfd8c0ee4cce11e45b3fd6f9d5e69e0cc62912aa6a0cb1bf4617b0eba5a12f"
 dependencies = [
  "generic-array 0.14.5",
  "typenum",
+]
+
+[[package]]
+name = "ctor"
+version = "0.1.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdffe87e1d521a10f9696f833fe502293ea446d7f256c06128293a4119bdf4cb"
+dependencies = [
+ "quote 1.0.20",
+ "syn 1.0.98",
 ]
 
 [[package]]
@@ -2032,6 +2043,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ghost"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b93490550b1782c589a350f2211fff2e34682e25fed17ef53fc4fa8fe184975e"
+dependencies = [
+ "proc-macro2 1.0.40",
+ "quote 1.0.20",
+ "syn 1.0.98",
+]
+
+[[package]]
 name = "gimli"
 version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2443,6 +2465,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if 1.0.0",
+]
+
+[[package]]
+name = "inventory"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0257e268c91daba296499206db5dd5a058875936bec3d8429b5f3e20ec9dc9a"
+dependencies = [
+ "ctor",
+ "ghost",
 ]
 
 [[package]]

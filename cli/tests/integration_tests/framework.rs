@@ -6,6 +6,7 @@ use std::fs;
 use std::pin::Pin;
 use std::process::Stdio;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 use tempdir::TempDir;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
@@ -131,7 +132,7 @@ impl PostgresDb {
 }
 
 struct SqliteDb {
-    tmp_dir: Rc<TempDir>,
+    tmp_dir: Arc<TempDir>,
 }
 
 impl SqliteDb {
@@ -341,7 +342,7 @@ impl AsyncTestableOutput {
 
 pub struct Chisel {
     config: ChiseldConfig,
-    tmp_dir: Rc<TempDir>,
+    tmp_dir: Arc<TempDir>,
 }
 
 impl Chisel {
@@ -477,7 +478,7 @@ pub async fn setup_chiseld(
     db_config: DatabaseConfig,
     optimize: bool,
 ) -> Result<(Database, GuardedChild, Chisel)> {
-    let tmp_dir = Rc::new(TempDir::new("chiseld_test")?);
+    let tmp_dir = Arc::new(TempDir::new("chiseld_test")?);
 
     let db: Database = match db_config {
         DatabaseConfig::Postgres(config) => Database::Postgres(PostgresDb::new(config)),
@@ -563,4 +564,24 @@ impl TestContext {
     pub fn get_chisels(&mut self) -> (&mut Chisel, &mut GuardedChild) {
         return (&mut self.chisel, &mut self.chiseld);
     }
+}
+
+use futures::future::BoxFuture;
+pub trait AsyncFn {
+    fn call(&self, args: TestConfig) -> BoxFuture<'static, ()>;
+}
+
+impl<T, F> AsyncFn for T
+where
+    T: Fn(TestConfig) -> F,
+    F: std::future::Future<Output = ()> + 'static + std::marker::Send,
+{
+    fn call(&self, config: TestConfig) -> BoxFuture<'static, ()> {
+        Box::pin(self(config))
+    }
+}
+
+pub struct IntegrationTest {
+    pub name: &'static str,
+    pub test_fn: &'static (dyn AsyncFn + Sync),
 }

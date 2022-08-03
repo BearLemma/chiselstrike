@@ -54,8 +54,8 @@ pub(crate) fn run_tests(opt: Opt, optimize: bool) -> bool {
         let path = Path::new("tests/lit").join(test_file);
         vec![std::fs::canonicalize(path).unwrap()]
     } else {
-        let deno_lits = glob::glob("tests/integration_tests/lit/**/*.deno").unwrap();
-        let node_lits = glob::glob("tests/integration_tests/lit/**/*.node").unwrap();
+        let deno_lits = glob::glob("tests/integration_tests/lit_tests/**/*.deno").unwrap();
+        let node_lits = glob::glob("tests/integration_tests/lit_tests/**/*.node").unwrap();
         deno_lits
             .chain(node_lits)
             .map(|path| std::fs::canonicalize(path.unwrap()).unwrap())

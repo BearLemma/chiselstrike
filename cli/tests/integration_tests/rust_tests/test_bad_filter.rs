@@ -1,4 +1,4 @@
-use crate::framework::{OpMode, TestConfig};
+use crate::framework::{IntegrationTest, OpMode, TestConfig};
 
 pub async fn test_bad_filter(config: TestConfig) {
     let mut ctx = config.setup_env(OpMode::Deno).await;
@@ -26,3 +26,8 @@ pub async fn test_bad_filter(config: TestConfig) {
         .must_contain_ord("endpoints/query.ts:6:53 - error TS2769: No overload matches this call.")
         .must_contain_ord("Argument of type '{ foo: string; }' is not assignable to parameter of type 'Partial<Person>'");
 }
+
+inventory::submit!(IntegrationTest {
+    name: "test_bad_filter",
+    test_fn: &test_bad_filter
+});

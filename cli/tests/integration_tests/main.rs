@@ -7,8 +7,8 @@ pub mod common;
 
 mod framework;
 mod lit;
-mod native;
 mod rust;
+mod rust_tests;
 
 fn main() {
     // install the current packages in our package.json. This will make things like esbuild
@@ -24,14 +24,10 @@ fn main() {
     }
     run("cargo", args);
 
-    let ok_rust_tests = rust::run_tests(&opt);
-    let ok_without_optimization = lit::run_tests(opt.clone(), false);
-    let ok_with_optimization = lit::run_tests(opt.clone(), true);
-    std::process::exit(
-        if ok_with_optimization && ok_without_optimization && ok_rust_tests {
-            0
-        } else {
-            1
-        },
-    );
+    let run_results = vec![
+        rust::run_tests(&opt),
+        // lit::run_tests(opt.clone(), false),
+        // lit::run_tests(opt.clone(), true),
+    ];
+    std::process::exit(if run_results.iter().all(|x| *x) { 0 } else { 1 });
 }
