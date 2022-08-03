@@ -268,13 +268,13 @@ impl TestableOutput {
 pub struct AsyncTestableOutput {
     #[allow(dead_code)]
     pub output_type: OutputType,
-    async_output: Pin<Box<dyn AsyncRead>>,
+    async_output: Pin<Box<dyn AsyncRead + Send>>,
     pub raw_output: BytesMut,
     cursor: usize,
 }
 
 impl AsyncTestableOutput {
-    fn new(output_type: OutputType, async_output: Pin<Box<dyn AsyncRead>>) -> Self {
+    fn new(output_type: OutputType, async_output: Pin<Box<dyn AsyncRead + Send>>) -> Self {
         Self {
             output_type,
             async_output,

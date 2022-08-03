@@ -1,6 +1,11 @@
 use serde_json::json;
 
-use crate::framework::{OpMode, TestConfig};
+use crate::framework::{IntegrationTest, OpMode, TestConfig};
+
+inventory::submit!(IntegrationTest {
+    name: "test_find_by",
+    test_fn: &test_find_by
+});
 
 pub async fn test_find_by(config: TestConfig) {
     let mut ctx = config.setup_env(OpMode::Deno).await;
