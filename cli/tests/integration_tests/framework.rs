@@ -5,7 +5,6 @@ use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
 use std::pin::Pin;
 use std::process::Stdio;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 use tempdir::TempDir;

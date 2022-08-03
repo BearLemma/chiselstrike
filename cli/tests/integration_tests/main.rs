@@ -1,4 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+#[macro_use]
+extern crate test_macro;
+
 use crate::common::{bin_dir, run, Opt};
 use structopt::StructOpt;
 

@@ -742,6 +742,7 @@ dependencies = [
  "swc_ecmascript",
  "tempdir",
  "tempfile",
+ "test_macro",
  "tokio",
  "toml",
  "tonic",
@@ -5149,6 +5150,10 @@ dependencies = [
  "libc",
  "winapi",
 ]
+
+[[package]]
+name = "test_macro"
+version = "0.1.0"
 
 [[package]]
 name = "text_lines"

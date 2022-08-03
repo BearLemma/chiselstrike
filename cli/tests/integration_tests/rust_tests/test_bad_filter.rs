@@ -5,7 +5,11 @@ inventory::submit!(IntegrationTest {
     test_fn: &test_bad_filter
 });
 
+#[log_entry_and_exit(hello, "world")]
+pub async fn bagr(config: TestConfig) {}
+
 pub async fn test_bad_filter(config: TestConfig) {
+    dummy();
     let mut ctx = config.setup_env(OpMode::Deno).await;
     let (chisel, _chiseld) = ctx.get_chisels();
 
