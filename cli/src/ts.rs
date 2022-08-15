@@ -1,7 +1,9 @@
-use crate::chisel::{type_msg::TypeEnum, AddTypeRequest, ContainerType, FieldDefinition, TypeMsg};
+use crate::chisel::{
+    type_msg::TypeEnum, AddTypeRequest, ContainerType, FieldDefinition, StructField, StructType,
+    TypeMsg,
+};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use chisel_server::auth::is_auth_entity_name;
-use std::collections::BTreeSet;
 use std::fmt;
 use std::path::Path;
 use swc_common::sync::Lrc;
@@ -15,7 +17,9 @@ use swc_ecma_ast::{
     TsEntityName, TsKeywordTypeKind, TsType, TsTypeAnn,
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
-use swc_ecmascript::ast::{self as swc_ecma_ast};
+use swc_ecmascript::ast::{
+    self as swc_ecma_ast, ClassDecl, TsKeywordType, TsTypeAliasDecl, TsTypeElement,
+};
 use swc_ecmascript::parser as swc_ecma_parser;
 
 impl FieldDefinition {
@@ -62,6 +66,17 @@ impl fmt::Display for TypeEnum {
                 let inner = inner.value_type().unwrap();
                 write!(f, "Array<{inner}>")
             }
+            TypeEnum::Struct(user_struct) => {
+                write!(f, "{} {{ .. }}", user_struct.name)
+            }
+        }
+    }
+}
+
+impl From<TypeEnum> for TypeMsg {
+    fn from(type_enum: TypeEnum) -> Self {
+        TypeMsg {
+            type_enum: Some(type_enum),
         }
     }
 }
@@ -89,15 +104,19 @@ fn get_field_info(handler: &Handler, x: &PropName) -> Result<(String, bool)> {
     }
 }
 
-fn map_array_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
+fn map_keyword_type(handler: &Handler, kw: &TsKeywordType) -> Result<DeclType> {
+    match kw.kind {
+        TsKeywordTypeKind::TsStringKeyword => Ok(DeclType::String),
+        TsKeywordTypeKind::TsNumberKeyword => Ok(DeclType::Number),
+        TsKeywordTypeKind::TsBooleanKeyword => Ok(DeclType::Bool),
+        _ => Err(swc_err(handler, kw, "type keyword not supported")),
+    }
+}
+
+fn map_array_type(handler: &Handler, x: &TsType) -> Result<DeclType> {
     match x {
         TsType::TsArrayType(array_type) => match &*array_type.elem_type {
-            TsType::TsKeywordType(kw) => match kw.kind {
-                TsKeywordTypeKind::TsStringKeyword => Ok(TypeEnum::String(true)),
-                TsKeywordTypeKind::TsNumberKeyword => Ok(TypeEnum::Number(true)),
-                TsKeywordTypeKind::TsBooleanKeyword => Ok(TypeEnum::Bool(true)),
-                _ => Err(swc_err(handler, x, "type keyword not supported")),
-            },
+            TsType::TsKeywordType(kw) => map_keyword_type(handler, &kw),
             TsType::TsArrayType(_) => map_array_type(handler, &*array_type.elem_type),
             _ => Err(swc_err(
                 handler,
@@ -105,23 +124,18 @@ fn map_array_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
                 "only arrays of primitive types are supported",
             )),
         }
-        .map(TypeEnum::array),
+        .map(|e| DeclType::Array(Box::new(e))),
         _ => panic!("trying to map as array a type which is not an array"),
     }
 }
 
-fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
+fn map_type(handler: &Handler, x: &TsType) -> Result<DeclType> {
     match x {
-        TsType::TsKeywordType(kw) => match kw.kind {
-            TsKeywordTypeKind::TsStringKeyword => Ok(TypeEnum::String(true)),
-            TsKeywordTypeKind::TsNumberKeyword => Ok(TypeEnum::Number(true)),
-            TsKeywordTypeKind::TsBooleanKeyword => Ok(TypeEnum::Bool(true)),
-            _ => Err(swc_err(handler, x, "type keyword not supported")),
-        },
+        TsType::TsKeywordType(kw) => map_keyword_type(handler, &kw),
         TsType::TsTypeRef(tr) => match &tr.type_name {
             TsEntityName::Ident(id) => {
                 let ident_name = ident_to_string(id);
-                Ok(TypeEnum::Entity(ident_name))
+                Ok(DeclType::TypeRef(ident_name))
             }
             TsEntityName::TsQualifiedName(_) => Err(anyhow!("qualified names are not supported")),
         },
@@ -130,24 +144,24 @@ fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
     }
 }
 
-fn get_field_type(handler: &Handler, x: &Option<TsTypeAnn>) -> Result<TypeEnum> {
+fn get_field_type(handler: &Handler, x: &Option<TsTypeAnn>) -> Result<DeclType> {
     let t = x
         .clone()
         .context("type annotation is temporarily mandatory")?;
     map_type(handler, &t.type_ann)
 }
 
-fn parse_literal(handler: &Handler, x: &Lit) -> Result<(String, TypeEnum)> {
+fn parse_literal(handler: &Handler, x: &Lit) -> Result<(String, DeclType)> {
     let r = match x {
-        Lit::Str(x) => (x.value.to_string(), TypeEnum::String(true)),
-        Lit::Bool(x) => (x.value.to_string(), TypeEnum::Bool(true)),
-        Lit::Num(x) => (x.value.to_string(), TypeEnum::Number(true)),
+        Lit::Str(x) => (x.value.to_string(), DeclType::String),
+        Lit::Bool(x) => (x.value.to_string(), DeclType::Bool),
+        Lit::Num(x) => (x.value.to_string(), DeclType::Number),
         x => anyhow::bail!(swc_err(handler, x, "literal not supported")),
     };
     Ok(r)
 }
 
-fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(String, TypeEnum)>> {
+fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(String, DeclType)>> {
     match x {
         None => Ok(None),
         Some(k) => match &**k {
@@ -187,10 +201,7 @@ fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<(Vec<String
                 );
                 for arg in &call.args {
                     if let Some((label, ty)) = get_field_value(handler, &Some(arg.expr.clone()))? {
-                        ensure!(
-                            matches!(ty, TypeEnum::String(_)),
-                            "Only strings accepted as labels"
-                        );
+                        ensure!(ty == DeclType::String, "Only strings accepted as labels");
                         output.push(label);
                     }
                 }
@@ -213,24 +224,7 @@ fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<(Vec<String
     Ok((output, is_unique))
 }
 
-fn validate_type_vec(type_vec: &[AddTypeRequest], valid_entities: &BTreeSet<String>) -> Result<()> {
-    for t in type_vec {
-        for field in t.field_defs.iter() {
-            if let TypeEnum::Entity(name) = field.field_type()? {
-                if valid_entities.get(name).is_none() && !is_auth_entity_name(name) {
-                    bail!(
-                        "field '{}' in class '{}' is of unknown entity type '{name}'",
-                        field.name,
-                        t.name
-                    );
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Result<FieldDefinition> {
+fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Result<EntityDeclField> {
     let (field_name, is_optional) = get_field_info(handler, &x.key)?;
     anyhow::ensure!(field_name != "id", "Creating a field with the name `id` is not supported. 😟\nBut don't worry! ChiselStrike creates an id field automatically, and you can access it in your endpoints as {}.id 🤩", class_name);
 
@@ -240,89 +234,128 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
     };
     let (labels, is_unique) = get_type_decorators(handler, &x.decorators)?;
 
-    match &field_type {
-        TypeEnum::Entity(name) if !is_optional => match &x.value {
-            None => {
-                eprintln!(
-                        "Warning: Entity `{class_name}` contains field `{field_name}` of entity type `{name}` which is not default-initialized.\n\
-                        \tWhen using this field, its methods might not be available. As a temporary workaround, please consider initializing the field `{field_name}: {name} = new {name}();`\n\
-                        \tFor further information, please see https://github.com/chiselstrike/chiselstrike/issues/1541"
-                    );
-            }
+    let missing_initializer = match &field_type {
+        DeclType::TypeRef(name) if !is_optional => match &x.value {
+            None => true,
             Some(k) => match &**k {
-                Expr::New(_) => {}
+                Expr::New(_) => false,
                 x => anyhow::bail!(swc_err(
                     handler,
                     x,
                     &format!(
-                        "field `{field_name}` of entity type `{name}` has unexpected initializer"
+                        "field `{field_name}` of type name `{name}` has unexpected initializer"
                     ),
                 )),
             },
         },
-        _ => {}
+        _ => false,
     };
 
-    Ok(FieldDefinition {
+    Ok(EntityDeclField {
         name: field_name,
         is_optional,
         is_unique,
         default_value,
-        field_type: Some(TypeMsg {
-            type_enum: field_type.into(),
-        }),
+        field_type,
         labels,
+        missing_initializer,
     })
 }
 
 fn parse_class_decl<P: AsRef<Path>>(
     handler: &Handler,
     filename: &P,
-    type_vec: &mut Vec<AddTypeRequest>,
-    valid_types: &mut BTreeSet<String>,
-    decl: &Decl,
-) -> Result<()> {
-    match decl {
-        Decl::Class(x) => {
-            let mut field_defs = Vec::default();
-            let name = ident_to_string(&x.ident);
-            if !valid_types.insert(name.clone()) {
-                bail!("Model {} defined twice", name);
-            }
+    decl: &ClassDecl,
+) -> Result<EntityDecl> {
+    let mut fields = Vec::default();
+    let name = ident_to_string(&decl.ident);
 
-            for member in &x.class.body {
-                match member {
-                    ClassMember::ClassProp(x) => match parse_class_prop(x, &name, handler) {
-                        Err(err) => {
-                            handler.span_err(x.span(), &format!("While parsing class {}", name));
-                            bail!("{}", err);
-                        }
-                        Ok(fd) => {
-                            field_defs.push(fd);
-                        }
-                    },
-                    ClassMember::Constructor(_x) => {
-                        handler.span_err(member.span(), "Constructors not allowed in ChiselStrike model definitions. Consider adding default values so one is not needed, or call ChiselEntity's create method");
-                        bail!("invalid type file {}", filename.as_ref().display());
-                    }
-                    _ => {}
+    for member in &decl.class.body {
+        match member {
+            ClassMember::ClassProp(x) => match parse_class_prop(x, &name, handler) {
+                Err(err) => {
+                    handler.span_err(x.span(), &format!("While parsing class {}", name));
+                    bail!("{}", err);
                 }
+                Ok(fd) => {
+                    fields.push(fd);
+                }
+            },
+            ClassMember::Constructor(_x) => {
+                handler.span_err(member.span(), "Constructors not allowed in ChiselStrike model definitions. Consider adding default values so one is not needed, or call ChiselEntity's create method");
+                bail!("invalid type file {}", filename.as_ref().display());
             }
-            type_vec.push(AddTypeRequest { name, field_defs });
-        }
-        z => {
-            handler.span_err(z.span(), "Only class definitions allowed in the types file");
-            bail!("invalid type file {}", filename.as_ref().display());
+            _ => {}
         }
     }
-    Ok(())
+    Ok(EntityDecl { name, fields })
 }
 
-fn parse_one_file<P: AsRef<Path>>(
-    filename: &P,
-    type_vec: &mut Vec<AddTypeRequest>,
-    valid_types: &mut BTreeSet<String>,
-) -> Result<()> {
+fn parse_type_decl(handler: &Handler, decl: &TsTypeAliasDecl) -> Result<StructDecl> {
+    let type_name = ident_to_string(&decl.id);
+    let mut fields = vec![];
+    match &*decl.type_ann {
+        TsType::TsTypeLit(type_lit) => {
+            for element in &type_lit.members {
+                let field = parse_type_element(element, &type_name, handler)?;
+                fields.push(field);
+            }
+        }
+        _ => {}
+    }
+    Ok(StructDecl {
+        name: type_name.clone(),
+        fields,
+    })
+}
+
+fn parse_type_element(
+    element: &TsTypeElement,
+    type_name: &str,
+    handler: &Handler,
+) -> Result<StructDeclField> {
+    match element {
+        TsTypeElement::TsPropertySignature(property) => {
+            let (field_name, is_optional) = match &*property.key {
+                Expr::Ident(id) => (ident_to_string(id), id.optional),
+                z => anyhow::bail!(swc_err(handler, z, "expected an identifier")),
+            };
+
+            let field_type = if let Some(type_ann) = &property.type_ann {
+                match &*type_ann.type_ann {
+                    TsType::TsKeywordType(kw) => map_keyword_type(handler, kw)?,
+                    _ => anyhow::bail!(swc_err(
+                        handler,
+                        type_ann,
+                        &format!(
+                            "type `{type_name}` has a property `{field_name}` of unsupported type"
+                        ),
+                    )),
+                }
+            } else {
+                anyhow::bail!(swc_err(
+                    handler,
+                    property,
+                    &format!(
+                        "type `{type_name}` has a property `{field_name}` without type annotation"
+                    ),
+                ))
+            };
+            Ok(StructDeclField {
+                name: field_name,
+                field_type,
+                is_optional,
+            })
+        }
+        _ => anyhow::bail!(swc_err(
+            handler,
+            element,
+            &format!("type `{type_name}` has a member which isn't a property"),
+        )),
+    }
+}
+
+fn parse_one_file<P: AsRef<Path>>(filename: &P, user_types: &mut UserTypes) -> Result<()> {
     let cm: Lrc<SourceMap> = Default::default();
 
     let emitter = Box::new(emitter::EmitterWriter::new(
@@ -367,9 +400,20 @@ fn parse_one_file<P: AsRef<Path>>(
 
     for decl in &x.body {
         match decl {
-            ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(exp)) => {
-                parse_class_decl(&handler, filename, type_vec, valid_types, &exp.decl)?;
-            }
+            ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(exp)) => match &exp.decl {
+                Decl::Class(class_decl) => {
+                    let entity = parse_class_decl(&handler, filename, &class_decl)?;
+                    user_types.add_entity(entity)?;
+                }
+                Decl::TsTypeAlias(type_decl) => {
+                    let user_struct = parse_type_decl(&handler, &type_decl)?;
+                    user_types.add_structure(user_struct)?;
+                }
+                z => {
+                    handler.span_err(z.span(), "Only class definitions allowed in the types file");
+                    bail!("invalid type file {}", filename.as_ref().display());
+                }
+            },
             ModuleItem::ModuleDecl(ModuleDecl::Import(_)) => {
                 // Right now just accept imports, but don't try to parse them.
                 // The compiler will error out if the imports are invalid.
@@ -387,15 +431,162 @@ fn parse_one_file<P: AsRef<Path>>(
     Ok(())
 }
 
-pub(crate) fn parse_types<P: AsRef<Path>>(files: &[P]) -> Result<Vec<AddTypeRequest>> {
-    let mut type_vec = vec![];
+struct EntityDecl {
+    name: String,
+    fields: Vec<EntityDeclField>,
+}
 
-    let mut valid_types = BTreeSet::new();
+struct EntityDeclField {
+    name: String,
+    field_type: DeclType,
+    labels: Vec<String>,
+    default_value: Option<String>,
+    is_optional: bool,
+    is_unique: bool,
+    /// Set to true if the field is of TypeRef type and it's missing default initializer which
+    /// will result in a warning if the field type turns out to be Entity.
+    missing_initializer: bool,
+}
 
-    for filename in files {
-        parse_one_file(filename, &mut type_vec, &mut valid_types)?;
+struct StructDecl {
+    name: String,
+    fields: Vec<StructDeclField>,
+}
+
+struct StructDeclField {
+    name: String,
+    field_type: DeclType,
+    is_optional: bool,
+}
+
+#[derive(PartialEq)]
+enum DeclType {
+    String,
+    Number,
+    Bool,
+    /// Reference to an Entity or Structure
+    TypeRef(String),
+    Array(Box<DeclType>),
+}
+
+struct UserTypes {
+    entities: Vec<EntityDecl>,
+    structs: Vec<StructDecl>,
+}
+
+impl UserTypes {
+    fn new() -> Self {
+        Self {
+            entities: vec![],
+            structs: vec![],
+        }
     }
 
-    validate_type_vec(&type_vec, &valid_types)?;
-    Ok(type_vec)
+    fn check_existence(&self, name: &str) -> Result<()> {
+        if self.get_entity(name).is_some() {
+            anyhow::bail!("entity of name {name} already exists!");
+        }
+        if self.get_struct(name).is_some() {
+            anyhow::bail!("structure of name {name} already exists!");
+        }
+        Ok(())
+    }
+
+    fn add_entity(&mut self, entity: EntityDecl) -> Result<()> {
+        self.check_existence(&entity.name)
+            .context(anyhow!("failed to add entity {}", entity.name))?;
+        self.entities.push(entity);
+        Ok(())
+    }
+
+    fn add_structure(&mut self, user_struct: StructDecl) -> Result<()> {
+        self.check_existence(&user_struct.name)
+            .context(anyhow!("failed to add structure {}", user_struct.name))?;
+        self.structs.push(user_struct);
+        Ok(())
+    }
+
+    fn get_entity(&self, name: &str) -> Option<&EntityDecl> {
+        self.entities.iter().find(|e| e.name == name)
+    }
+
+    fn get_struct(&self, name: &str) -> Option<&StructDecl> {
+        self.structs.iter().find(|e| e.name == name)
+    }
+
+    fn generate_type_requests(&self) -> Result<Vec<AddTypeRequest>> {
+        let mut add_type_requests = vec![];
+        for entity in &self.entities {
+            let mut fields = vec![];
+            for field in &entity.fields {
+                let field_type = self.resolve_type(&field.field_type)?;
+                if field.missing_initializer {
+                    if let TypeEnum::Entity(field_type_name) = &field_type {
+                        eprintln!(
+                            "Warning: Entity `{entity}` contains field `{field}` of entity type `{field_type}` which is not default-initialized.\n\
+                            \tWhen using this field, its methods might not be available. As a temporary workaround, please consider initializing the field `{field}: {entity} = new {entity}();`\n\
+                            \tFor further information, please see https://github.com/chiselstrike/chiselstrike/issues/1541",
+                            entity=entity.name, field=field.name, field_type=field_type_name
+                        );
+                    }
+                }
+
+                fields.push(FieldDefinition {
+                    name: field.name.clone(),
+                    field_type: Some(field_type.into()),
+                    labels: field.labels.clone(),
+                    is_optional: field.is_optional,
+                    default_value: field.default_value.clone(),
+                    is_unique: field.is_unique,
+                })
+            }
+
+            add_type_requests.push(AddTypeRequest {
+                name: entity.name.to_string(),
+                field_defs: fields,
+            })
+        }
+        Ok(add_type_requests)
+    }
+
+    fn resolve_type(&self, ty: &DeclType) -> Result<TypeEnum> {
+        let proto_ty = match ty {
+            DeclType::String => TypeEnum::String(true),
+            DeclType::Number => TypeEnum::Number(true),
+            DeclType::Bool => TypeEnum::Bool(true),
+            DeclType::TypeRef(type_name) => {
+                if self.get_entity(type_name).is_some() || is_auth_entity_name(type_name) {
+                    TypeEnum::Entity(type_name.to_string())
+                } else if let Some(structure) = self.get_struct(type_name) {
+                    let mut fields = vec![];
+                    for field in &structure.fields {
+                        let field_type = self.resolve_type(&field.field_type)?;
+                        fields.push(StructField {
+                            name: field.name.to_string(),
+                            field_type: Some(field_type.into()),
+                            is_optional: field.is_optional,
+                        })
+                    }
+                    TypeEnum::Struct(StructType {
+                        name: type_name.to_string(),
+                        fields,
+                    })
+                } else {
+                    anyhow::bail!("unable to resolve type name {type_name}")
+                }
+            }
+            DeclType::Array(element_type) => TypeEnum::array(self.resolve_type(&*element_type)?),
+        };
+        Ok(proto_ty)
+    }
+}
+
+pub(crate) fn parse_types<P: AsRef<Path>>(files: &[P]) -> Result<Vec<AddTypeRequest>> {
+    let mut user_types = UserTypes::new();
+
+    for filename in files {
+        parse_one_file(filename, &mut user_types)?;
+    }
+    dbg!(user_types.generate_type_requests());
+    user_types.generate_type_requests()
 }

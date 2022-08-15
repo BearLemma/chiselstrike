@@ -15,7 +15,8 @@ use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
 use crate::types::{
-    DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
+    DbIndex, Entity, Field, NewField, NewObject, ObjectType, Struct, StructField, Type, TypeSystem,
+    TypeSystemError,
 };
 use anyhow::{Context, Result};
 use async_lock::Mutex;
@@ -603,6 +604,17 @@ impl FieldDefinition {
     }
 }
 
+impl chisel::StructField {
+    fn field_type(&self) -> Result<&TypeEnum> {
+        self.field_type
+            .as_ref()
+            .with_context(|| format!("field_type of field '{}' is None", self.name))?
+            .type_enum
+            .as_ref()
+            .with_context(|| format!("type_enum of field '{}' is None", self.name))
+    }
+}
+
 impl ContainerType {
     fn value_type(&self) -> Result<&TypeEnum> {
         self.value_type
@@ -617,7 +629,9 @@ impl ContainerType {
 impl TypeEnum {
     fn is_builtin(&self, ts: &TypeSystem) -> Result<bool> {
         let is_builtin = match self {
-            TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) => true,
+            TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) | TypeEnum::Struct(_) => {
+                true
+            }
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name).is_ok(),
             TypeEnum::Array(inner) => inner.value_type()?.is_builtin(ts)?,
         };
@@ -631,6 +645,20 @@ impl TypeEnum {
             TypeEnum::Bool(_) => Type::Boolean,
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name)?,
             TypeEnum::Array(inner) => Type::Array(Box::new(inner.value_type()?.get_builtin(ts)?)),
+            TypeEnum::Struct(user_struct) => {
+                let mut fields = vec![];
+                for field in &user_struct.fields {
+                    fields.push(StructField {
+                        name: field.name.clone(),
+                        field_type: field.field_type()?.get_builtin(ts)?,
+                        is_optional: field.is_optional,
+                    });
+                }
+                Type::Struct(Struct {
+                    name: user_struct.name.clone(),
+                    fields,
+                })
+            }
         };
         Ok(ty)
     }

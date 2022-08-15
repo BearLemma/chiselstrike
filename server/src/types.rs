@@ -496,9 +496,12 @@ impl TypeSystem {
 
     pub(crate) fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
         match ty {
-            TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id | TypeId::Array(_) => {
-                self.lookup_builtin_type(&ty.name())
-            }
+            TypeId::String
+            | TypeId::Float
+            | TypeId::Boolean
+            | TypeId::Id
+            | TypeId::Array(_)
+            | TypeId::Struct { .. } => self.lookup_builtin_type(&ty.name()),
             TypeId::Entity { name, api_version } => {
                 self.lookup_entity(name, api_version).map(Type::Entity)
             }
@@ -513,6 +516,7 @@ pub(crate) enum Type {
     Boolean,
     Entity(Entity),
     Array(Box<Type>),
+    Struct(Struct),
 }
 
 impl Type {
@@ -523,6 +527,7 @@ impl Type {
             Type::Boolean => "boolean".to_string(),
             Type::Entity(ty) => ty.name.to_string(),
             Type::Array(ty) => format!("Array<{}>", ty.name()),
+            Type::Struct(user_struct) => format!("{}{{ .. }}", user_struct.name),
         }
     }
 }
@@ -531,6 +536,19 @@ impl From<Entity> for Type {
     fn from(entity: Entity) -> Self {
         Type::Entity(entity)
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Struct {
+    name: String,
+    fields: Vec<StructField>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct StructField {
+    name: String,
+    field_type: Type,
+    is_optional: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -706,6 +724,7 @@ pub(crate) enum TypeId {
     Id,
     Entity { name: String, api_version: String },
     Array(Box<TypeId>),
+    Struct { name: String, fields: Vec<TypeId> },
 }
 
 impl TypeId {
@@ -716,6 +735,7 @@ impl TypeId {
             TypeId::Boolean => "boolean".to_string(),
             TypeId::Entity { ref name, .. } => name.to_string(),
             TypeId::Array(elem_type) => format!("Array<{}>", elem_type.name()),
+            TypeId::Struct { name, .. } => format!("{name}{{..}}"),
         }
     }
 }
@@ -733,6 +753,17 @@ impl From<Type> for TypeId {
             Type::Array(elem_type) => {
                 let element_type_id: Self = (*elem_type).into();
                 Self::Array(Box::new(element_type_id))
+            }
+            Type::Struct(user_struct) => {
+                let fields = user_struct
+                    .fields
+                    .iter()
+                    .map(|f| f.field_type.clone().into())
+                    .collect::<Vec<TypeId>>();
+                Self::Struct {
+                    name: user_struct.name,
+                    fields,
+                }
             }
         }
     }

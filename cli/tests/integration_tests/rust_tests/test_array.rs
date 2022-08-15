@@ -11,11 +11,16 @@ pub async fn test_array(config: TestConfig) {
     chisel.write(
         "models/types.ts",
         r##"
+        export type Pod = {
+            bagr: number;
+            trol: string;
+        }
         export class Foo extends Chisel.ChiselEntity {
             order: number = 0;
             numbers: number[] = [];
             strings: string[] = [];
             booleans: boolean[][] = [];
+            pod: Pod;
         }
     "##,
     );

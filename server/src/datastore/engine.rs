@@ -4,7 +4,7 @@ use crate::datastore::query::{
     KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
 use crate::datastore::{DbConnection, Kind};
-use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
+use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem, StructField};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_lock::Mutex;
@@ -707,6 +707,7 @@ impl QueryEngine {
                 };
                 SqlValue::String(val)
             }
+            TypeId::Struct { fields, .. } =>
         };
 
         Ok(arg)
@@ -739,6 +740,10 @@ impl QueryEngine {
         } else {
             anyhow::bail!("provided json value is not an array")
         }
+        Ok(())
+    }
+
+    fn validate_struct(&self, fields: &[StructField], value: &serde_json::Value) -> Result<()> {
         Ok(())
     }
 

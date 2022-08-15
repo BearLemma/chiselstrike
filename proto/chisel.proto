@@ -48,11 +48,23 @@ message TypeMsg {
     bool bool = 3;
     string entity = 4;
     ContainerType array = 5;
+    StructType struct = 6;
   };
 }
 
 message ContainerType {
   TypeMsg value_type = 1;
+}
+
+message StructType {
+  string name = 1;
+  repeated StructField fields = 2;
+}
+
+message StructField {
+  string name = 1;
+  TypeMsg field_type = 2;
+  bool is_optional = 3;
 }
 
 message EndpointDefinition {
